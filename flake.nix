@@ -48,19 +48,25 @@
                 pkgs.findutils
                 pkgs.libxml2
                 pkgs.nixfmt-rfc-style
+                pkgs.ktfmt
               ];
               interpreter = "${pkgs.runtimeShell}";
               execer = [
                 "cannot:${pkgs.nixfmt-rfc-style}/bin/nixfmt"
+                "cannot:${pkgs.ktfmt}/bin/ktfmt"
               ];
             }
             ''
               find . -name "*.xml" -type f -exec xmllint --output '{}' --format '{}' \;
               find . -name "*.nix" -type f -exec nixfmt '{}' \;
+              find . -name "*.kt" -type f -exec ktfmt '{}' \;
             '';
+
+        devShells.default = pkgs.mkShell env;
+
         packages = rec {
 
-          gen = pkgs.runCommand "george.gen" env ''
+          gen = pkgs.runCommand "george-gen" env ''
             mkdir $out
             $ANDROID_HOME/build-tools/${buildToolsVersion}/aapt package -f -m \
               -J $out \
@@ -73,9 +79,17 @@
               $out/majkrzak/george/R.java
           '';
 
+          cls = pkgs.runCommand "george-cls" env ''
+            mkdir $out
+            kotlinc \
+              -classpath $ANDROID_HOME/platforms/android-${platformVersion}/android.jar:${gen} \
+              -d $out \
+              ${src}
+          '';
+
           dex = pkgs.runCommand "george.dex" env ''
             $ANDROID_HOME/build-tools/${buildToolsVersion}/d8 \
-              $(find ${gen} -name "*.class") \
+              $(find ${gen} ${cls} -name "*.class") \
               $ANDROID_HOME/platforms/android-${platformVersion}/android.jar
             mv classes.dex $out
           '';

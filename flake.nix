@@ -89,8 +89,7 @@
 
           dex = pkgs.runCommand "george.dex" env ''
             $ANDROID_HOME/build-tools/${buildToolsVersion}/d8 \
-              $(find ${gen} ${cls} -name "*.class") \
-              $ANDROID_HOME/platforms/android-${platformVersion}/android.jar
+              $(find ${gen} ${cls} -name "*.class")
             mv classes.dex $out
           '';
 

@@ -89,7 +89,8 @@
 
           dex = pkgs.runCommand "george.dex" env ''
             $ANDROID_HOME/build-tools/${buildToolsVersion}/d8 \
-              $(find ${gen} ${cls} -name "*.class")
+              $(find ${gen} ${cls} -name "*.class") \
+              ${pkgs.kotlin}/lib/kotlin-stdlib.jar
             mv classes.dex $out
           '';
 

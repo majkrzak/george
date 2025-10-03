@@ -27,7 +27,11 @@
           buildToolsVersions = [ buildToolsVersion ];
         };
 
-        src = pkgs.lib.cleanSource ./.;
+        sources = {
+          src = pkgs.lib.cleanSource ./src;
+          res = pkgs.lib.cleanSource ./res;
+          manifest = pkgs.lib.cleanSource ./AndroidManifest.xml;
+        };
 
         env = {
           ANDROID_HOME = "${android.androidsdk}/libexec/android-sdk";
@@ -36,6 +40,7 @@
             android.androidsdk
             pkgs.jdk
             pkgs.kotlin
+            pkgs.zip
           ];
 
         };
@@ -66,43 +71,57 @@
 
         packages = rec {
 
-          gen = pkgs.runCommand "george-gen" env ''
+          flats = pkgs.runCommand "george.flats" env ''
             mkdir $out
-            $ANDROID_HOME/build-tools/${buildToolsVersion}/aapt package -f -m \
-              -J $out \
-              -S ${self.sourceInfo}/res \
-              -M ${self.sourceInfo}/AndroidManifest.xml \
-              -I $ANDROID_HOME/platforms/android-${platformVersion}/android.jar
+            $ANDROID_HOME/build-tools/${buildToolsVersion}/aapt2 compile \
+              --dir ${sources.res} \
+              -o $out
+          '';
+
+          base-apk =
+            pkgs.runCommand "george.base.apk"
+              (
+                env
+                // {
+                  outputs = [
+                    "out"
+                    "java"
+                  ];
+                }
+              )
+              ''
+                mkdir $java
+                $ANDROID_HOME/build-tools/${buildToolsVersion}/aapt2 link \
+                  -o $out \
+                  --manifest ${sources.manifest} \
+                  -I $ANDROID_HOME/platforms/android-${platformVersion}/android.jar \
+                  --java $java \
+                  $(find ${flats} -type f)
+              '';
+
+          classes = pkgs.runCommand "george-classes" env ''
+            mkdir $out
             javac \
               -classpath $ANDROID_HOME/platforms/android-${platformVersion}/android.jar \
               -d $out \
-              $out/majkrzak/george/R.java
-          '';
-
-          cls = pkgs.runCommand "george-cls" env ''
-            mkdir $out
+              $(find ${base-apk.java} -type f)
             kotlinc \
-              -classpath $ANDROID_HOME/platforms/android-${platformVersion}/android.jar:${gen} \
+              -classpath $ANDROID_HOME/platforms/android-${platformVersion}/android.jar \
               -d $out \
-              ${src}
+              ${sources.src} ${base-apk.java}
           '';
 
           dex = pkgs.runCommand "george.dex" env ''
             $ANDROID_HOME/build-tools/${buildToolsVersion}/d8 \
-              $(find ${gen} ${cls} -name "*.class") \
+              $(find ${classes} -name "*.class") \
               ${pkgs.kotlin}/lib/kotlin-stdlib.jar
             mv classes.dex $out
           '';
 
           unaligned-apk = pkgs.runCommand "george.unaligned.apk" env ''
-            mkdir apk
-            ln -s ${dex} apk/classes.dex
-            $ANDROID_HOME/build-tools/${buildToolsVersion}/aapt package \
-              -M ${self.sourceInfo}/AndroidManifest.xml \
-              -S ${self.sourceInfo}/res \
-              -I $ANDROID_HOME/platforms/android-${platformVersion}/android.jar \
-              -F $out \
-            apk
+            cp --dereference --no-preserve=mode ${base-apk} $out
+            cp --dereference --no-preserve=mode ${dex} classes.dex
+            zip -u $out classes.dex
           '';
 
           unsigned-apk = pkgs.runCommand "george.unsigned.apk" env ''

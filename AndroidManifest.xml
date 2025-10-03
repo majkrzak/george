@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="majkrzak.george">
   <uses-sdk android:minSdkVersion="30" android:targetSdkVersion="36"/>
-  <application android:label="@string/app_name" android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
-    <activity android:name="MainActivity" android:exported="true">
+  <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
+  <application android:name="Application" android:label="@string/app_name">
+    <activity android:name="MainActivity" android:exported="true" android:theme="@android:style/Theme.DeviceDefault">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
     </activity>
+    <activity android:name="RequestPermissions" android:exported="true" android:theme="@android:style/Theme.DeviceDefault.Light.Dialog">
+  </activity>
   </application>
-  <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
 </manifest>

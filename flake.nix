@@ -27,6 +27,48 @@
           buildToolsVersions = [ buildToolsVersion ];
         };
 
+        tools = {
+          aapt2-compile =
+            pkgs.resholve.writeScript "aapt2-compile"
+              {
+                inputs = [
+                  pkgs.coreutils
+                  "${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/"
+                ];
+                interpreter = "${pkgs.runtimeShell}";
+                execer = [
+                  "cannot:${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/aapt2"
+                ];
+              }
+              ''
+                mkdir $2
+                cp $1 $2/$3
+                aapt2 compile $2/$3 -o .
+                mv $4 $out
+              '';
+          aapt2-link =
+            pkgs.resholve.writeScript "aapt2-link"
+              {
+                inputs = [
+                  pkgs.coreutils
+                  "${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/"
+                ];
+                interpreter = "${pkgs.runtimeShell}";
+                execer = [
+                  "cannot:${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/aapt2"
+                ];
+              }
+              ''
+                mkdir $java
+                aapt2 link \
+                  -o $out \
+                  --manifest $1 \
+                  -I ${android.androidsdk}/libexec/android-sdk/platforms/android-${platformVersion}/android.jar \
+                  --java $java \
+                  $2
+              '';
+        };
+
         sources = {
           src = pkgs.lib.fileset.fromSource ./src;
           res = pkgs.lib.fileset.fromSource ./res;
@@ -34,6 +76,7 @@
         };
 
         env = {
+          #NIX_DEBUG=7;
           ANDROID_HOME = "${android.androidsdk}/libexec/android-sdk";
 
           buildInputs = [
@@ -41,6 +84,11 @@
             pkgs.jdk
             pkgs.kotlin
             pkgs.zip
+          ];
+
+          packages = [
+            tools.aapt2-compile
+            tools.aapt2-link
           ];
 
         };
@@ -83,36 +131,32 @@
                 if isValues then (pkgs.lib.strings.removeSuffix ".xml" fileName) + ".arsc" else fileName;
               name = "${dirName}_${newFileName}.flat";
             in
-            pkgs.runCommand name env ''
-              mkdir ${dirName}
-              cp ${f} ${dirName}/${fileName}
-              $ANDROID_HOME/build-tools/${buildToolsVersion}/aapt2 compile \
-                ${dirName}/${fileName}\
-                -o .
-              mv ${name} $out
-            ''
+            derivation {
+              name = name;
+              system = system;
+              builder = tools.aapt2-compile;
+              args = [
+                f
+                dirName
+                fileName
+                name
+              ];
+            }
           ) (pkgs.lib.fileset.toList (sources.res));
 
-          base-apk =
-            pkgs.runCommand "george.base.apk"
-              (
-                env
-                // {
-                  outputs = [
-                    "out"
-                    "java"
-                  ];
-                }
-              )
-              ''
-                mkdir $java
-                $ANDROID_HOME/build-tools/${buildToolsVersion}/aapt2 link \
-                  -o $out \
-                  --manifest ${sources.manifest} \
-                  -I $ANDROID_HOME/platforms/android-${platformVersion}/android.jar \
-                  --java $java \
-                  ${pkgs.lib.join " " flats}
-              '';
+          base-apk = derivation {
+            name = "george.base.apk";
+            system = system;
+            outputs = [
+              "out"
+              "java"
+            ];
+            builder = tools.aapt2-link;
+            args = [
+              sources.manifest
+              (pkgs.lib.join " " flats)
+            ];
+          };
 
           classes = pkgs.runCommand "george-classes" env ''
             mkdir $out

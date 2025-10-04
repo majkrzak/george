@@ -28,9 +28,9 @@
         };
 
         sources = {
-          src = pkgs.lib.cleanSource ./src;
-          res = pkgs.lib.cleanSource ./res;
-          manifest = pkgs.lib.cleanSource ./AndroidManifest.xml;
+          src = pkgs.lib.fileset.fromSource ./src;
+          res = pkgs.lib.fileset.fromSource ./res;
+          manifest = ./AndroidManifest.xml;
         };
 
         env = {
@@ -71,12 +71,27 @@
 
         packages = rec {
 
-          flats = pkgs.runCommand "george.flats" env ''
-            mkdir $out
-            $ANDROID_HOME/build-tools/${buildToolsVersion}/aapt2 compile \
-              --dir ${sources.res} \
-              -o $out
-          '';
+          flats = map (
+            f:
+            let
+              unpackedName = pkgs.lib.path.removePrefix sources.res._internalBase f;
+              pathComponents = pkgs.lib.path.subpath.components unpackedName;
+              dirName = builtins.elemAt pathComponents 0;
+              fileName = builtins.elemAt pathComponents 1;
+              isValues = pkgs.lib.strings.hasPrefix "values" dirName;
+              newFileName =
+                if isValues then (pkgs.lib.strings.removeSuffix ".xml" fileName) + ".arsc" else fileName;
+              name = "${dirName}_${newFileName}.flat";
+            in
+            pkgs.runCommand name env ''
+              mkdir ${dirName}
+              cp ${f} ${dirName}/${fileName}
+              $ANDROID_HOME/build-tools/${buildToolsVersion}/aapt2 compile \
+                ${dirName}/${fileName}\
+                -o .
+              mv ${name} $out
+            ''
+          ) (pkgs.lib.fileset.toList (sources.res));
 
           base-apk =
             pkgs.runCommand "george.base.apk"
@@ -96,7 +111,7 @@
                   --manifest ${sources.manifest} \
                   -I $ANDROID_HOME/platforms/android-${platformVersion}/android.jar \
                   --java $java \
-                  $(find ${flats} -type f)
+                  ${pkgs.lib.join " " flats}
               '';
 
           classes = pkgs.runCommand "george-classes" env ''
@@ -108,7 +123,7 @@
             kotlinc \
               -classpath $ANDROID_HOME/platforms/android-${platformVersion}/android.jar \
               -d $out \
-              ${sources.src} ${base-apk.java}
+              ${pkgs.lib.join " " (pkgs.lib.fileset.toList sources.src)} ${base-apk.java}
           '';
 
           dex = pkgs.runCommand "george.dex" env ''

@@ -69,6 +69,24 @@
                     $files
                 '';
           };
+          d8 =
+            pkgs.resholve.writeScript "d8"
+              {
+                inputs = [
+                  pkgs.coreutils
+                  pkgs.findutils
+                  pkgs.jdk
+                ];
+                interpreter = "${pkgs.runtimeShell}";
+              }
+              ''
+                java \
+                  -cp ${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/lib/d8.jar \
+                  com.android.tools.r8.D8 \
+                  $(find $files -type f -name "*.jar" -o -name "*.dex" -o -name "*.class") \
+                  $([ -z "$intermediate" ] && echo "--intermediate")
+                mv classes.dex $out
+              '';
         };
 
         sources = {
@@ -90,6 +108,7 @@
           packages = [
             tools.aapt2.compile
             tools.aapt2.link
+            tools.d8
           ];
 
         };
@@ -166,12 +185,15 @@
               ${pkgs.lib.join " " (pkgs.lib.fileset.toList sources.src)} ${base-apk.java}
           '';
 
-          dex = pkgs.runCommand "george.dex" env ''
-            $ANDROID_HOME/build-tools/${buildToolsVersion}/d8 \
-              $(find ${classes} -name "*.class") \
-              ${pkgs.kotlin}/lib/kotlin-stdlib.jar
-            mv classes.dex $out
-          '';
+          dex = derivation {
+            name = "george.dex";
+            system = system;
+            builder = tools.d8;
+            files = [
+              "${classes}"
+              "${pkgs.kotlin}/lib/kotlin-stdlib.jar"
+            ];
+          };
 
           unaligned-apk = pkgs.runCommand "george.unaligned.apk" env ''
             cp --dereference --no-preserve=mode ${base-apk} $out

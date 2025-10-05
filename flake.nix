@@ -116,6 +116,7 @@
             pkgs.kotlin
             pkgs.zip
             pkgs.sops
+            pkgs.openssl
           ];
 
           #           packages = [
@@ -221,16 +222,26 @@
               $out
           '';
 
-          jks = pkgs.runCommand "george.jks" env ''
-            keytool -genkeypair -keystore $out -alias android \
-              -dname "CN=george O=majkrzak" \
-              -validity 10000 -keyalg EC \
-              -storepass android -keypass android
+          keystore = pkgs.runCommand "george.jks" env ''
+            openssl x509 -new \
+              -key ${secrets.signing-key}  \
+              -subj "/CN=majkrzak.george" \
+              -set_serial 1 \
+              -not_before "19700101000001Z" \
+              -not_after "99991231000000Z" \
+              -sigopt "nonce-type:1" \
+              > cert.pem
+            openssl pkcs12 -export -in cert.pem -inkey ${secrets.signing-key} \
+              -out cert.p12 -name android -password pass:android
+            keytool -importkeystore \
+              -deststorepass android -destkeypass android -destkeystore $out \
+              -srckeystore cert.p12 -srcstoretype PKCS12 -srcstorepass android \
+              -alias android
           '';
 
           apk = pkgs.runCommand "george.apk" env ''
             $ANDROID_HOME/build-tools/${buildToolsVersion}/apksigner sign \
-              --ks ${jks} \
+              --ks ${keystore} \
               --ks-key-alias android \
               --ks-pass pass:android \
               --key-pass pass:android \

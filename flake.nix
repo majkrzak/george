@@ -95,6 +95,18 @@
           manifest = ./AndroidManifest.xml;
         };
 
+        secrets = {
+          signing-key = pkgs.requireFile {
+            name = "key.pem";
+            message = ''
+              Android signing key: key.pem is not loaded.
+              Load it with:
+              > nix-store --add-fixed sha256 key.pem
+            '';
+            hash = "sha256-aW8rpNcy7aIOTdaS3wl5F+bSaEbKYAvT4mycPtHX260=";
+          };
+        };
+
         env = {
           ANDROID_HOME = "${android.androidsdk}/libexec/android-sdk";
 
@@ -103,13 +115,14 @@
             pkgs.jdk
             pkgs.kotlin
             pkgs.zip
+            pkgs.sops
           ];
 
-          packages = [
-            tools.aapt2.compile
-            tools.aapt2.link
-            tools.d8
-          ];
+          #           packages = [
+          #             tools.aapt2.compile
+          #             tools.aapt2.link
+          #             tools.d8
+          #           ];
 
         };
       in
@@ -209,16 +222,16 @@
           '';
 
           jks = pkgs.runCommand "george.jks" env ''
-            keytool -genkeypair -keystore $out -alias androidkey \
-              -dname "CN=george" \
-              -validity 10000 -keyalg RSA -keysize 2048 \
+            keytool -genkeypair -keystore $out -alias android \
+              -dname "CN=george O=majkrzak" \
+              -validity 10000 -keyalg EC \
               -storepass android -keypass android
           '';
 
           apk = pkgs.runCommand "george.apk" env ''
             $ANDROID_HOME/build-tools/${buildToolsVersion}/apksigner sign \
               --ks ${jks} \
-              --ks-key-alias androidkey \
+              --ks-key-alias android \
               --ks-pass pass:android \
               --key-pass pass:android \
               --out $out \

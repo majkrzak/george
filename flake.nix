@@ -28,45 +28,47 @@
         };
 
         tools = {
-          aapt2-compile =
-            pkgs.resholve.writeScript "aapt2-compile"
-              {
-                inputs = [
-                  pkgs.coreutils
-                  "${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/"
-                ];
-                interpreter = "${pkgs.runtimeShell}";
-                execer = [
-                  "cannot:${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/aapt2"
-                ];
-              }
-              ''
-                mkdir $2
-                cp $1 $2/$3
-                aapt2 compile $2/$3 -o .
-                mv $4 $out
-              '';
-          aapt2-link =
-            pkgs.resholve.writeScript "aapt2-link"
-              {
-                inputs = [
-                  pkgs.coreutils
-                  "${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/"
-                ];
-                interpreter = "${pkgs.runtimeShell}";
-                execer = [
-                  "cannot:${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/aapt2"
-                ];
-              }
-              ''
-                mkdir $java
-                aapt2 link \
-                  -o $out \
-                  --manifest $1 \
-                  -I ${android.androidsdk}/libexec/android-sdk/platforms/android-${platformVersion}/android.jar \
-                  --java $java \
-                  $2
-              '';
+          aapt2 = {
+            compile =
+              pkgs.resholve.writeScript "aapt2-compile"
+                {
+                  inputs = [
+                    pkgs.coreutils
+                    "${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/"
+                  ];
+                  interpreter = "${pkgs.runtimeShell}";
+                  execer = [
+                    "cannot:${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/aapt2"
+                  ];
+                }
+                ''
+                  mkdir $dirName
+                  cp $input $dirName/$fileName
+                  aapt2 compile $dirName/$fileName -o .
+                  mv $name $out
+                '';
+            link =
+              pkgs.resholve.writeScript "aapt2-link"
+                {
+                  inputs = [
+                    pkgs.coreutils
+                    "${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/"
+                  ];
+                  interpreter = "${pkgs.runtimeShell}";
+                  execer = [
+                    "cannot:${android.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/aapt2"
+                  ];
+                }
+                ''
+                  mkdir $java
+                  aapt2 link \
+                    -o $out \
+                    --manifest $manifest \
+                    -I ${android.androidsdk}/libexec/android-sdk/platforms/android-${platformVersion}/android.jar \
+                    --java $java \
+                    $files
+                '';
+          };
         };
 
         sources = {
@@ -76,7 +78,6 @@
         };
 
         env = {
-          #NIX_DEBUG=7;
           ANDROID_HOME = "${android.androidsdk}/libexec/android-sdk";
 
           buildInputs = [
@@ -87,8 +88,8 @@
           ];
 
           packages = [
-            tools.aapt2-compile
-            tools.aapt2-link
+            tools.aapt2.compile
+            tools.aapt2.link
           ];
 
         };
@@ -134,13 +135,10 @@
             derivation {
               name = name;
               system = system;
-              builder = tools.aapt2-compile;
-              args = [
-                f
-                dirName
-                fileName
-                name
-              ];
+              builder = tools.aapt2.compile;
+              dirName = dirName;
+              fileName = fileName;
+              input = f;
             }
           ) (pkgs.lib.fileset.toList (sources.res));
 
@@ -151,11 +149,9 @@
               "out"
               "java"
             ];
-            builder = tools.aapt2-link;
-            args = [
-              sources.manifest
-              (pkgs.lib.join " " flats)
-            ];
+            builder = tools.aapt2.link;
+            manifest = sources.manifest;
+            files = flats;
           };
 
           classes = pkgs.runCommand "george-classes" env ''

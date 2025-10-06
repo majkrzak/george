@@ -96,15 +96,11 @@
         };
 
         secrets = {
-          signing-key = pkgs.requireFile {
-            name = "key.pem";
-            message = ''
-              Android signing key: key.pem is not loaded.
-              Load it with:
-              > nix-store --add-fixed sha256 key.pem
-            '';
-            hash = "sha256-aW8rpNcy7aIOTdaS3wl5F+bSaEbKYAvT4mycPtHX260=";
-          };
+          signing-key = builtins.exec [
+            "${pkgs.runtimeShell}"
+            "-c"
+            "echo \\'\\' && ${pkgs.sops}/bin/sops decrypt ${./.secrets/signing-key} && echo \\'\\'"
+          ];
         };
 
         env = {
@@ -223,15 +219,17 @@
           '';
 
           keystore = pkgs.runCommand "george.jks" env ''
+            echo "${secrets.signing-key}" > key.pem
+            cat key.pem
             openssl x509 -new \
-              -key ${secrets.signing-key}  \
+              -key key.pem  \
               -subj "/CN=majkrzak.george" \
               -set_serial 1 \
               -not_before "19700101000001Z" \
               -not_after "99991231000000Z" \
               -sigopt "nonce-type:1" \
               > cert.pem
-            openssl pkcs12 -export -in cert.pem -inkey ${secrets.signing-key} \
+            openssl pkcs12 -export -in cert.pem -inkey key.pem \
               -out cert.p12 -name android -password pass:android
             keytool -importkeystore \
               -deststorepass android -destkeypass android -destkeystore $out \

@@ -4,6 +4,12 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
+  nixConfig = {
+    sandbox-paths = [
+      "/var/run/sops=/tmp/sops.socket?"
+    ];
+  };
+
   outputs =
     {
       self,
@@ -95,13 +101,13 @@
           manifest = ./AndroidManifest.xml;
         };
 
-        secrets = {
-          signing-key = builtins.exec [
-            "${pkgs.runtimeShell}"
-            "-c"
-            "echo \\'\\' && ${pkgs.sops}/bin/sops decrypt ${./.secrets/signing-key} && echo \\'\\'"
-          ];
-        };
+        #         secrets = {
+        #           signing-key = builtins.exec [
+        #             "${pkgs.runtimeShell}"
+        #             "-c"
+        #             "echo \\'\\' && ${pkgs.sops}/bin/sops decrypt ${./.secrets/signing-key} && echo \\'\\'"
+        #           ];
+        #         };
 
         env = {
           ANDROID_HOME = "${android.androidsdk}/libexec/android-sdk";
@@ -113,6 +119,10 @@
             pkgs.zip
             pkgs.sops
             pkgs.openssl
+            pkgs.curl
+            pkgs.gnupg
+            pkgs.pcsclite
+            pkgs.usbutils
           ];
 
           #           packages = [
@@ -144,6 +154,31 @@
               find . -name "*.nix" -type f -exec nixfmt '{}' \;
               find . -name "*.kt" -type f -exec ktfmt '{}' \;
             '';
+
+        apps = {
+          keyservice = {
+            type = "app";
+            program = "${pkgs.resholve.writeScript "keyservice"
+              {
+                inputs = [
+                  pkgs.coreutils
+                  pkgs.sops
+                ];
+                interpreter = "${pkgs.runtimeShell}";
+                execer = [
+                  "cannot:${pkgs.sops}/bin/sops"
+                ];
+              }
+              ''
+                sops keyservice --net unix --addr /tmp/sops.socket --verbose &
+                pid=$!
+                sleep 1
+                chmod uog+rw /tmp/sops.socket
+                wait $pid
+              ''
+            }";
+          };
+        };
 
         devShells.default = pkgs.mkShell env;
 
@@ -219,8 +254,10 @@
           '';
 
           keystore = pkgs.runCommand "george.jks" env ''
-            echo "${secrets.signing-key}" > key.pem
-            cat key.pem
+            sops decrypt \
+              --enable-local-keyservice=false \
+              --keyservice unix:///var/run/sops \
+              ${./.secrets/signing-key} > key.pem
             openssl x509 -new \
               -key key.pem  \
               -subj "/CN=majkrzak.george" \
